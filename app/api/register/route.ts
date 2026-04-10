@@ -6,11 +6,19 @@ export interface Device {
   name: string
   url: string
   lastSeen: number
+  // Live state reported by Pi agent
+  currentRssi:   number | null
+  movementCount: number
+  direction:     string | null
+  speed:         string | null
+  calibrated:    boolean
+  breathing:     boolean
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { id, name, url } = await req.json()
+    const body = await req.json()
+    const { id, name, url } = body
 
     if (!id || !url) {
       return NextResponse.json({ error: 'id and url are required' }, { status: 400 })
@@ -18,17 +26,22 @@ export async function POST(req: NextRequest) {
 
     const device: Device = {
       id,
-      name: name || `Pi (${id.slice(0, 6)})`,
+      name:          name || `Pi (${id.slice(0, 6)})`,
       url,
-      lastSeen: Date.now(),
+      lastSeen:      Date.now(),
+      currentRssi:   body.current_rssi   ?? null,
+      movementCount: body.movement_count ?? 0,
+      direction:     body.direction      ?? null,
+      speed:         body.speed          ?? null,
+      calibrated:    body.calibrated     ?? false,
+      breathing:     body.breathing      ?? false,
     }
 
-    // Store device with 90s TTL — Pi must heartbeat every 30s to stay listed
     await kv.set(`device:${id}`, device, { ex: 90 })
     await kv.sadd('devices', id)
 
     return NextResponse.json({ ok: true })
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }
